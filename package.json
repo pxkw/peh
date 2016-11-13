@@ -1,0 +1,25 @@
+{
+  "name": "peh",
+  "version": "0.0.0",
+  "description": "Performance Estimator for HQL",
+  "main": "index.js",
+  "scripts": {
+    "test:init": "npm run test:init:e2e",
+    "test:init:e2e": "node test/e2e/res/init-testdata.js",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "JASMINE_CONFIG_PATH=test/unit/jasmine.json jasmine",
+    "test:e2e": "bats test/e2e/*-spec.bats"
+  },
+  "directories": {
+    "test": "test/unit"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fs-extra": "^1.0.0"
+  },
+  "devDependencies": {
+    "jasmine": "^2.5.2",
+    "random-js": "^1.0.8"
+  }
+}
