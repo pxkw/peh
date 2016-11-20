@@ -1,6 +1,6 @@
 {
   "name": "peh",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Performance Estimator for HQL",
   "main": "index.js",
   "scripts": {
