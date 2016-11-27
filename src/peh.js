@@ -5,18 +5,9 @@ const cproc = require('child_process');
 
 function Peh() {}
 
-Peh.prototype.gen = `gen`;
-Peh.prototype.logfilePath = `${Peh.prototype.gen}/peh.log`;
+Peh.prototype.logfilePath = `peh.log`;
 
-Peh.prototype.copyFileSync = function (src, dst) {
-  if (fs.existsSync(dst)) {
-    fs.unlinkSync(dst);
-  }
-  fs.copySync(src, dst);
-};
-
-Peh.prototype.extractTables = function (givenHqlPath) {
-  const hql = fs.readFileSync(givenHqlPath, 'utf8');
+Peh.prototype.extractTables = function (hql) {
   const tokens = hql
     .replace(/\n/g, ' ')
     .replace(/;/g, ' ')
@@ -43,82 +34,67 @@ Peh.prototype.extractTables = function (givenHqlPath) {
   return tables;
 };
 
-Peh.prototype.sampleTableQuery = function (table, sampledTable, sampleNum) {
-  return `\
-DROP TABLE IF EXISTS ${sampledTable};\n\
-CREATE TABLE ${sampledTable}\n\
-  AS SELECT *\n\
-  FROM ${table}\n\
-  DISTRIBUTE BY rand()\n\
-  SORT BY rand()\n\
-  LIMIT ${sampleNum};\n`;
+Peh.prototype.sampleQuery = function (table, nrow) {
+  let newTable = `${table}_sampled_${nrow}`
+  return `DROP TABLE IF EXISTS ${newTable};\n`
+    + `CREATE TABLE ${newTable} AS SELECT * FROM ${table} LIMIT ${nrow};\n`;
 };
 
-Peh.prototype.createSampleQuery = function (tables, path, sampleNum) {
-  const self = this;
-  let query = '';
-
-  tables.forEach( function (table) {
-    const sampledTable = `${table}_sampled`;
-    query += self.sampleTableQuery(table, sampledTable, sampleNum) + "\n";
-  });
-
-  fs.writeFileSync(path, query);
-};
-
-Peh.prototype.replaceTableNamesWithSampleds = function (hqlPath, testHqlPath, tables) {
-  this.copyFileSync(hqlPath, testHqlPath);
-
-  let hql = fs.readFileSync(testHqlPath, 'utf8');
+Peh.prototype.queryForSampledTables = function (hql, tables, nrow) {
   tables.forEach(function (table) {
     const target = new RegExp(table, 'g');
-    const w = `${table}_sampled`;
+    const w = `${table}_sampled_${nrow}`;
     hql = hql.replace(target, w);
   });
-  fs.writeFileSync(testHqlPath, hql);
+  return hql;
 };
 
-Peh.prototype.sampleTable = function (sampleNum, tables) {
-  var queryPath = `${this.gen}/sample.hql`;
-  this.createSampleQuery(tables, queryPath, sampleNum);
-  this.runHql(queryPath);
-};
+Peh.prototype.sampleTable = function (tables, nrows) {
+  let query = '';
+  let self = this;
 
-Peh.prototype.runHql = function (hql) {
-  try {
-    const out = cproc.execSync(`(hive -f '${hql}') 2>&1 1>${this.logfilePath}`);
-    fs.writeFileSync(this.logfilePath, out, {flag: 'a'});
-  } catch (e) {
-    fs.writeFileSync(this.logfilePath, e, {flag: 'a'});
-    throw e;
-  }
-};
-
-Peh.prototype.smokeTest = function (givenHqlPath, sampleNum) {
-  const givenHqlName = path.basename(givenHqlPath);
-  const testHqlPath = `${this.gen}/_test_${givenHqlName}`
-  const tables = this.extractTables(givenHqlPath);
-
-  this.sampleTable(sampleNum, tables);
-  this.replaceTableNamesWithSampleds(givenHqlPath, testHqlPath, tables);
-  console.time(sampleNum);
-  this.runHql(testHqlPath);
-  console.timeEnd(sampleNum);
-};
-
-Peh.prototype.mkGenDir = function () {
-  if (!fs.existsSync(this.gen)) {
-    fs.mkdirSync(this.gen);
-  }
-};
-
-Peh.prototype.performanceTest = function (givenHqlPath) {
-  this.mkGenDir();
-  const sampleNums = [10, 100, 1000];
-  const self = this;
-  sampleNums.forEach(function (sampleNum) {
-    self.smokeTest(givenHqlPath, sampleNum);
+  console.log('\n## Sampling data');
+  tables.forEach(function (table) {
+    nrows.forEach(function (nrow) {
+      console.log(`Creating table: ${table}_sampled_${nrow}`);
+      query += self.sampleQuery(table, nrow);
+    })
   });
+
+  this.runHql(query);
+};
+
+Peh.prototype.runHql = function (_hql) {
+  let hql = _hql.replace(/`/g, '\\`');
+  let tmpLog = this.logfilePath + '.tmp';
+  let failMsg;
+
+  try {
+    cproc.execSync(`(hive -e "${hql}" 2>&1) 1> ${tmpLog}`);
+  } catch (err) {
+    failMsg = cproc.execSync(`grep --color=never "FAILED" ${tmpLog}`)
+      .toString()
+      .replace(/\n$/, '');
+  }
+
+  cproc.execSync(`cat ${tmpLog} >> ${this.logfilePath}`);
+  cproc.execSync(`rm -f ${tmpLog}`);
+
+  if (failMsg) {
+    throw new Error(failMsg);
+  }
+};
+
+Peh.prototype.smokeTest = function (hql, nrow) {
+  const tables = this.extractTables(hql);
+
+  this.sampleTable(tables, [nrow]);
+  let smokeTestHql = this.queryForSampledTables(hql, tables, nrow);
+
+  console.log("\n## Smoke test");
+  console.time(`${nrow}rows`);
+  this.runHql(smokeTestHql);
+  console.timeEnd(`${nrow}rows`);
 };
 
 module.exports = Peh;
