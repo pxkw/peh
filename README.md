@@ -8,6 +8,30 @@
 - [Hive](https://hive.apache.org)
 - [Node.js](https://nodejs.org)
 
+# Usage
+
+
+## Table sampling
+
+`peh --sample tablename nrow [nrow ...]`
+
+example:
+```
+peh --sample table1 123 345
+```
+
+
+## Smoke test
+
+`peh --smoke hqlpath [nrow]`
+
+
+example:
+```
+peh --smoke ./path/to/query.hql 1000
+```
+
+
 # Tests
 
 Requires additional tools:
