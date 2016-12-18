@@ -1,6 +1,6 @@
 {
   "name": "peh",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Performance Estimator for HQL",
   "bin": "./index.js",
   "main": "index.js",
